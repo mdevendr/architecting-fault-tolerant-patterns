@@ -2,7 +2,7 @@
 
 Review target:
 
-`C:\Users\mahes\Downloads\Architecting AWS Fault-Tolerant Architecture _ by Mahesh Devendran _ Medium.pdf`
+Article draft PDF for "Architecting AWS Fault-Tolerant Architecture"
 
 Review date: 2026-07-11
 

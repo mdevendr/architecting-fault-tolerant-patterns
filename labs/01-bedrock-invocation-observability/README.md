@@ -51,8 +51,7 @@ The application logs each model invocation with operational metadata:
 From the repository root:
 
 ```bash
-cd "/c/mahesh/AWS SA/work/architecting-fault-tolerant-patterns"
-./labs/01-bedrock-invocation-observability/scripts/deploy.sh --profile melon --region us-east-1
+./labs/01-bedrock-invocation-observability/scripts/deploy.sh --profile <aws-profile> --region us-east-1
 ```
 
 The default model is:
@@ -65,7 +64,7 @@ Override it if your account uses a different Bedrock model:
 
 ```bash
 ./labs/01-bedrock-invocation-observability/scripts/deploy.sh \
-  --profile melon \
+  --profile <aws-profile> \
   --region us-east-1 \
   --model-id "anthropic.claude-3-haiku-20240307-v1:0"
 ```
@@ -73,9 +72,9 @@ Override it if your account uses a different Bedrock model:
 ## Run Evidence Invocations
 
 ```bash
-./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile melon --region us-east-1 --scenario normal
-./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile melon --region us-east-1 --scenario degraded
-./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile melon --region us-east-1 --scenario policy-sensitive
+./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile <aws-profile> --region us-east-1 --scenario normal
+./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile <aws-profile> --region us-east-1 --scenario degraded
+./labs/01-bedrock-invocation-observability/scripts/invoke.sh --profile <aws-profile> --region us-east-1 --scenario policy-sensitive
 ```
 
 Responses are written to:
@@ -87,7 +86,7 @@ evidence/sample-responses/
 ## Capture Logs
 
 ```bash
-./labs/01-bedrock-invocation-observability/scripts/capture-logs.sh --profile melon --region us-east-1
+./labs/01-bedrock-invocation-observability/scripts/capture-logs.sh --profile <aws-profile> --region us-east-1
 ```
 
 Captured logs are written to:
@@ -117,7 +116,7 @@ fields @timestamp, event_type, capability, model_id, prompt_version, degradation
 ## Clean Up
 
 ```bash
-./labs/01-bedrock-invocation-observability/scripts/destroy.sh --profile melon --region us-east-1
+./labs/01-bedrock-invocation-observability/scripts/destroy.sh --profile <aws-profile> --region us-east-1
 ```
 
 ## Status

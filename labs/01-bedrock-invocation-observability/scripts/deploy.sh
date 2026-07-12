@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROFILE="melon"
+PROFILE="${AWS_PROFILE:-default}"
 REGION="us-east-1"
 STACK_NAME="ft-lab01-bedrock-observability"
 MODEL_ID="anthropic.claude-3-haiku-20240307-v1:0"
@@ -18,7 +18,7 @@ while [[ $# -gt 0 ]]; do
     --capability-name) CAPABILITY_NAME="$2"; shift 2 ;;
     -h|--help)
       cat <<USAGE
-Usage: $0 [--profile melon] [--region us-east-1] [--stack-name ft-lab01-bedrock-observability]
+Usage: $0 [--profile default] [--region us-east-1] [--stack-name ft-lab01-bedrock-observability]
           [--model-id MODEL_ID] [--prompt-version VERSION] [--capability-name NAME]
 USAGE
       exit 0
