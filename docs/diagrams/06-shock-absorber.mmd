@@ -1,0 +1,17 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    P["Producer"]
+    B["Queue or stream buffer"]
+    CG["Consumer group"]
+    DEP["Downstream dependency"]
+    ID["Idempotency store"]
+    DLQ["DLQ"]
+    RP["Replay path"]
+    M["Backlog and DLQ metrics"]
+
+    P --> B --> CG --> DEP
+    CG --> ID
+    CG --> DLQ --> RP --> B
+    B --> M
+    DLQ --> M
+    DEP -. "slow or failed" .-> CG

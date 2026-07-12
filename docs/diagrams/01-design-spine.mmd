@@ -1,0 +1,21 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    A["Capability"]
+    B["Failure semantics"]
+    C["Failure domains"]
+    D["Resilience controls"]
+    E["Evidence"]
+
+    A --> B --> C --> D --> E
+
+    A1["Business function protected"]
+    B1["Continue, degrade, queue, fail closed, fallback"]
+    C1["AZ, Region, service, data, tenant, dependency, model"]
+    D1["AWS services and application patterns"]
+    E1["Fault injection, metrics, logs, replay, reconciliation"]
+
+    A -.-> A1
+    B -.-> B1
+    C -.-> C1
+    D -.-> D1
+    E -.-> E1

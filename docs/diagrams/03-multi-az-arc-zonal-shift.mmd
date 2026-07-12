@@ -1,0 +1,29 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart TB
+    U["Users"]
+    DNS["Route 53"]
+    LB["ALB or NLB"]
+    ARC["Route 53 ARC zonal shift"]
+    CW["CloudWatch per-AZ metrics"]
+    EB["EventBridge notification"]
+
+    subgraph AZA["Availability Zone A"]
+        A1["Targets"]
+    end
+
+    subgraph AZB["Availability Zone B"]
+        B1["Pre-scaled targets"]
+    end
+
+    subgraph AZC["Availability Zone C"]
+        C1["Pre-scaled targets"]
+    end
+
+    U --> DNS --> LB
+    LB -. "evacuated" .-> A1
+    LB --> B1
+    LB --> C1
+    ARC --> LB
+    CW --> ARC
+    ARC --> EB
+    A1 -. "impaired AZ" .-> ARC

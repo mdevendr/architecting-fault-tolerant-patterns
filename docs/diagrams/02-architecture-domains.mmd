@@ -1,0 +1,48 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    U["User or client"]
+
+    subgraph Edge["Edge and ingress"]
+        R["Route 53"]
+        C["CloudFront"]
+        W["WAF and Shield"]
+        A["API Gateway or ALB"]
+    end
+
+    subgraph Runtime["Runtime"]
+        S["Stateless compute"]
+        P["Health checks and scaling"]
+    end
+
+    subgraph Integration["Shock absorption"]
+        Q["SQS, SNS, EventBridge, Kinesis"]
+        D["DLQ and replay"]
+    end
+
+    subgraph State["State and recovery"]
+        DB["System of record"]
+        BK["Backup, PITR, replicas"]
+        RC["Reconciliation"]
+    end
+
+    subgraph AI["AI/ML and GenAI"]
+        M["Model or endpoint"]
+        V["Feature and vector freshness"]
+        G["Guardrails and fallback"]
+    end
+
+    subgraph Ops["Operations"]
+        O["Observability"]
+        DR["Disaster recovery"]
+        GV["Governance"]
+    end
+
+    U --> R --> C --> W --> A --> S --> Q --> DB
+    S --> P
+    Q --> D
+    DB --> BK --> RC
+    S --> M --> V --> G
+    Runtime --> Ops
+    Integration --> Ops
+    State --> Ops
+    AI --> Ops

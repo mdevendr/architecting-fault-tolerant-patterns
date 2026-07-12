@@ -1,0 +1,15 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    C["Caller"]
+    T["Timeout boundary"]
+    R["Retry with jitter"]
+    CB["Circuit breaker"]
+    BH["Bulkhead pool"]
+    D["Dependency"]
+    F["Fallback or queue"]
+    H["Health signal"]
+
+    C --> T --> R --> CB --> BH --> D
+    D -. "errors or latency" .-> H --> CB
+    CB -->|"open"| F
+    BH -. "limits shared capacity loss" .-> C

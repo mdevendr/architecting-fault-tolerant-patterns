@@ -1,0 +1,6 @@
+{
+  "capability": "customer-support-assistant",
+  "prompt_version": "support-assistant-v1",
+  "degradation_mode": "retrieval-unavailable",
+  "prompt": "Write a short degraded-mode response for a support assistant when retrieval context is temporarily unavailable. The response should be transparent and avoid inventing facts."
+}

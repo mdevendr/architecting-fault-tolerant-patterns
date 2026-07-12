@@ -1,0 +1,24 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    SRC["Document source"]
+    ING["Ingestion"]
+    DLQ["DLQ or review queue"]
+    EMB["Embedding generation"]
+    VEC["Vector index"]
+    FRESH["Freshness gate"]
+    AUTH["Retrieval authorisation"]
+    PROMPT["Prompt version"]
+    MODEL["Model invocation"]
+    GUARD["Guardrails"]
+    FALL["Fallback path"]
+    HUMAN["Human escalation"]
+    AUDIT["Audit trail"]
+
+    SRC --> ING --> EMB --> VEC --> FRESH --> AUTH --> PROMPT --> MODEL --> GUARD --> AUDIT
+    ING --> DLQ
+    EMB --> DLQ
+    FRESH -->|"stale"| FALL
+    AUTH -->|"not authorised"| FALL
+    MODEL -->|"timeout or throttle"| FALL
+    GUARD -->|"blocked"| HUMAN --> AUDIT
+    FALL --> AUDIT

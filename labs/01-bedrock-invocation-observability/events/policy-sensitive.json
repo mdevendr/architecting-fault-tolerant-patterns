@@ -1,0 +1,6 @@
+{
+  "capability": "customer-support-assistant",
+  "prompt_version": "support-assistant-v1",
+  "degradation_mode": "policy-sensitive",
+  "prompt": "Explain why an AI assistant should log safety and policy-sensitive routing metadata without storing the full user prompt in operational logs."
+}

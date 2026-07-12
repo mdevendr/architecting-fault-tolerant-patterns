@@ -1,0 +1,30 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#111111", "lineColor": "#111111", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "clusterBkg": "#ffffff", "clusterBorder": "#111111"}}}%%
+flowchart LR
+    APP["Application"]
+    DB["System of record"]
+
+    subgraph Outbox["Outbox partitioned by business boundary"]
+        T1["tenant_id or account_id"]
+        U1["user_id or order_id"]
+        E1["entity_id"]
+    end
+
+    PUB["Publisher"]
+
+    subgraph Groups["Parallel ordered streams"]
+        G1["MessageGroup or shard 1"]
+        G2["MessageGroup or shard 2"]
+        G3["MessageGroup or shard N"]
+    end
+
+    C["Consumers"]
+    DLQ["DLQ"]
+    REC["Reconciliation"]
+
+    APP --> DB --> Outbox --> PUB
+    PUB --> G1 --> C
+    PUB --> G2 --> C
+    PUB --> G3 --> C
+    C --> DLQ
+    C --> REC
+    DB --> REC

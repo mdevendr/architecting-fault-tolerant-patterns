@@ -1,0 +1,19 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+.aws-sam/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+cdk.out/
+.DS_Store
+Thumbs.db
+
+# Keep real evidence private until reviewed.
+evidence/screenshots/*
+evidence/logs/*
+evidence/cloudwatch/*
+evidence/step-functions/*
+evidence/sample-responses/*
+!evidence/**/.gitkeep
