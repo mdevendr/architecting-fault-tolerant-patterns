@@ -1,24 +1,43 @@
-# Fault-Tolerant Architecture Diagrams
+# Architecture Catalogue
 
-Monochrome Mermaid sources for the Medium article.
+This directory contains the visual architecture views supporting the article **Architecting AWS Fault-Tolerant Architecture - From Multi-AZ Resilience to AI/ML and GenAI Workloads**.
 
-Only create diagrams where the image shows an actual fault-tolerant architecture pattern. Article structure, design method, gap maps, and generic domain lists should stay as prose in the article.
+The diagrams communicate failure boundaries, containment mechanisms, recovery paths, state transitions, governance controls, and operational feedback loops. They are architectural views rather than deployable reference implementations.
 
-Render each `.mmd` file to SVG or PNG before adding it to Medium. Keep the rendered image clean, uncoloured, and readable on a white background.
+## Current Architecture Views
 
-Use diagrams for:
+The catalogue currently includes views covering:
 
-1. `03-multi-az-arc-zonal-shift.mmd`
-2. `04-state-protection-derived-recovery.mmd`
-3. `05-scalable-outbox-ordering.mmd`
-4. `06-shock-absorber.mmd`
-5. `07-dependency-protection.mmd`
-6. `08-genai-rag-fault-tolerance.mmd`
-7. `09-agentic-workflow-resilience.mmd`
-8. `10-ai-service-vs-trust-recovery.mmd`
+- advanced fault-tolerance domains and capability boundaries
+- AI/ML ingestion, feature management, training, evaluation, and deployment
+- write-time data-quality and freshness controls
+- compute bulkheads and recoverable training state
+- circuit breaking and dependency protection
+- multi-Region routing and recovery control
+- runtime request processing and degraded operation
+- stream buffering, backpressure, and controlled recovery
+- GenAI retrieval and RAG fault tolerance
+- agentic workflow resilience
+- AI service recovery versus trust recovery
 
-Do not diagram:
+## File Types
 
-- The Article's Spine
-- Fault-Tolerant Architecture Gap Map
-- Generic architecture domains
+- `.jpg` files are rendered architecture views suitable for the article and architecture discussions.
+- `.mmd` files are retained Mermaid sources for selected AI and GenAI architecture views.
+
+## Interpretation
+
+Each diagram should make the following concerns visible where applicable:
+
+1. The workload capability and failure boundary.
+2. The authoritative state or business invariant being protected.
+3. The mechanism used to contain or absorb failure.
+4. The degraded, retry, replay, rollback, or failover path.
+5. The control-plane decision and operational ownership.
+6. The telemetry or evidence required to confirm recovery.
+
+The diagrams intentionally avoid presenting one universal AWS topology. Service selection and recovery design must be derived from workload-specific availability objectives, consistency requirements, regulatory constraints, traffic characteristics, and operational maturity.
+
+## Evolution
+
+Additional diagrams may be added as new architectural patterns are assessed for the article. Superseded views should be removed or clearly identified so that this directory remains the canonical architecture catalogue.
