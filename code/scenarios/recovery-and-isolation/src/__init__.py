@@ -1,0 +1,2 @@
+"""Recovery and isolation scenario."""
+

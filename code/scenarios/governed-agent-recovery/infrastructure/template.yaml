@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Governed AgentCore tool execution with durable idempotency and compensation.
+
+Parameters:
+  RunId:
+    Type: String
+  RunName:
+    Type: String
+    AllowedPattern: '^[A-Za-z][A-Za-z0-9_]*$'
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ToolStateTable
+        RUN_ID: !Ref RunId
+
+Resources:
+  ToolStateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: call_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: call_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: ArchitectingFaultTolerant
+        - Key: RunId
+          Value: !Ref RunId
+
+  ToolFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fault-tolerance-governed-tool-${RunId}
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ToolStateTable
+      Tags:
+        Project: ArchitectingFaultTolerant
+        RunId: !Ref RunId
+
+  PolicyEngine:
+    Type: AWS::BedrockAgentCore::PolicyEngine
+    Properties:
+      Name: !Sub GovernedAgentPolicy_${RunName}
+      Description: Deterministic authorization for the governed-agent recovery experiment.
+      Tags:
+        - Key: Project
+          Value: ArchitectingFaultTolerant
+        - Key: RunId
+          Value: !Ref RunId
+
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-governed-tool
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ToolFunction.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock-agentcore:GetPolicyEngine
+                  - bedrock-agentcore:AuthorizeAction
+                  - bedrock-agentcore:PartiallyAuthorizeActions
+                Resource:
+                  - !GetAtt PolicyEngine.PolicyEngineArn
+                  - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
+
+  Gateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    Properties:
+      Name: !Sub governed-agent-${RunId}
+      Description: Evidence gateway for governed tool execution.
+      AuthorizerType: NONE
+      ProtocolType: MCP
+      RoleArn: !GetAtt GatewayRole.Arn
+      PolicyEngineConfiguration:
+        Arn: !GetAtt PolicyEngine.PolicyEngineArn
+        Mode: ENFORCE
+      Tags:
+        Project: ArchitectingFaultTolerant
+        RunId: !Ref RunId
+
+  GatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    Properties:
+      GatewayIdentifier: !GetAtt Gateway.GatewayIdentifier
+      Name: CreditTool
+      Description: Idempotent credit reservation and compensation tools.
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+      TargetConfiguration:
+        Mcp:
+          Lambda:
+            LambdaArn: !GetAtt ToolFunction.Arn
+            ToolSchema:
+              InlinePayload:
+                - Name: reserve_credit
+                  Description: Reserve credit once for an authorized business operation.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      call_id: { Type: string }
+                      tenant_id: { Type: string }
+                      actor_role: { Type: string }
+                      amount: { Type: integer }
+                      inject_failure_after_commit: { Type: boolean }
+                    Required: [call_id, tenant_id, actor_role, amount]
+
+  ToolInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ToolFunction
+      Principal: bedrock-agentcore.amazonaws.com
+      SourceArn: !GetAtt Gateway.GatewayArn
+
+  ReserveCreditPolicy:
+    Type: AWS::BedrockAgentCore::Policy
+    DependsOn: GatewayTarget
+    Properties:
+      Name: !Sub ReserveCredit_${RunName}
+      Description: Permit bounded credit reservations only for the credit-operator role.
+      PolicyEngineId: !GetAtt PolicyEngine.PolicyEngineId
+      EnforcementMode: ACTIVE
+      ValidationMode: FAIL_ON_ANY_FINDINGS
+      Definition:
+        Cedar:
+          Statement: !Sub |
+            permit(
+              principal,
+              action == AgentCore::Action::"${Gateway.GatewayArn}___CreditTool___reserve_credit",
+              resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
+            ) when {
+              context.input.actor_role == "credit-operator" &&
+              context.input.amount > 0 &&
+              context.input.amount <= 1000
+            };
+
+
+Outputs:
+  GatewayArn:
+    Value: !GetAtt Gateway.GatewayArn
+  GatewayIdentifier:
+    Value: !GetAtt Gateway.GatewayIdentifier
+  GatewayUrl:
+    Value: !GetAtt Gateway.GatewayUrl
+  PolicyEngineId:
+    Value: !GetAtt PolicyEngine.PolicyEngineId
+  ToolFunctionName:
+    Value: !Ref ToolFunction
+  ToolStateTableName:
+    Value: !Ref ToolStateTable

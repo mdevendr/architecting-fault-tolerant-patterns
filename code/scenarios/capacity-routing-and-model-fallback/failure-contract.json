@@ -1,0 +1,11 @@
+{
+  "capability": "foundation-model invocation under impairment",
+  "failure_contract": {
+    "transient_capacity_failure": "may route through an approved inference profile or bounded retry",
+    "invalid_request": "must fail without retry or model fallback",
+    "policy_failure": "must fail closed; another model is not a policy bypass",
+    "semantic_fallback": "permitted only when a pre-evaluated fallback satisfies the declared task contract",
+    "degraded_response": "must identify the fallback model and reduced capability contract"
+  }
+}
+

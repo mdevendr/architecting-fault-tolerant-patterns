@@ -1,0 +1,19 @@
+{
+  "capability": "asynchronous source-to-derived projection",
+  "failure_contract": {
+    "duplicate_event": "must not repeat a derived effect",
+    "out_of_order_event": "must not overwrite a newer projection version",
+    "poison_event": "must be isolated without advancing projection state",
+    "missed_event": "must be detected and repaired from the authoritative source",
+    "extra_or_corrupt_projection": "must be reported explicitly and repaired without changing source state"
+  },
+  "proof": [
+    "missing count",
+    "extra count",
+    "version mismatch count",
+    "oldest divergence age",
+    "repair count",
+    "final source and projection equality"
+  ]
+}
+

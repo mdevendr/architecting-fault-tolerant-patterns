@@ -1,16 +1,23 @@
-.terraform/
-*.tfstate
-*.tfstate.*
-.aws-sam/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .venv/
 node_modules/
 cdk.out/
+.aws-sam/
+.terraform/
+*.tfstate
+*.tfstate.*
+evidence/runs/
+!evidence/runs/.gitkeep
+*.log
+.env
+tmp/
+tmp-packaged.yaml
 .DS_Store
 Thumbs.db
 
-# Keep real evidence private until reviewed.
+# Keep unreviewed, potentially detailed operational evidence private.
 evidence/screenshots/*
 evidence/logs/*
 evidence/cloudwatch/*

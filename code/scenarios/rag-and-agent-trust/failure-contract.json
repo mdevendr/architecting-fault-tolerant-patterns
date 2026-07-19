@@ -1,0 +1,19 @@
+{
+  "contract_version": "1.0",
+  "business_capability": "Return a response only when retrieved context is current, authorized, attributable to an authoritative source version, and consistent with the applicable policy.",
+  "failure_semantics": {
+    "stale_index": "Return a controlled non-answer before vector retrieval or model invocation when the authoritative source version exceeds the indexed version.",
+    "unauthorized_context": "Reject retrieval outside the caller tenant and document authorization boundary.",
+    "missing_provenance": "Do not serve a grounded answer when source identity and version cannot be established.",
+    "policy_conflict": "Return a controlled non-answer or escalation when the generated claim conflicts with the deployed policy.",
+    "trust_recovery": "Serve the response only after ingestion, authorization, provenance, and policy controls all pass."
+  },
+  "thresholds": {
+    "stale_answers_served": 0,
+    "cross_tenant_results_served": 0,
+    "answers_without_provenance": 0,
+    "policy_conflicts_served": 0,
+    "authorized_current_responses_with_citations": 1
+  }
+}
+

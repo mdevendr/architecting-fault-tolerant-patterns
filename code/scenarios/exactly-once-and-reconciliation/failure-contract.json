@@ -1,0 +1,18 @@
+{
+  "contract_version": "1.0",
+  "business_capability": "Commit one business outcome for one operation identity while allowing at-least-once execution and replay.",
+  "failure_semantics": {
+    "duplicate_delivery": "Concurrent or repeated delivery must return the canonical completed result without repeating the business effect.",
+    "ambiguous_completion": "A crash after the external effect but before workflow completion must recover without repeating the effect.",
+    "abandoned_execution": "An expired in-progress lease may be reclaimed by a new execution owner.",
+    "derived_state": "Committed source state must publish through an outbox and any missing or incorrect projection must be detected and repaired."
+  },
+  "thresholds": {
+    "business_effect_count": 1,
+    "duplicate_business_effects": 0,
+    "unresolved_operations": 0,
+    "unpublished_outbox_records": 0,
+    "projection_mismatches_after_repair": 0
+  }
+}
+

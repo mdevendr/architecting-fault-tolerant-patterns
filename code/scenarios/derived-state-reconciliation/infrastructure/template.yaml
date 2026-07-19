@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: DynamoDB Streams to EventBridge Pipes projection with anti-entropy reconciliation.
+
+Parameters:
+  RunId:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        SOURCE_TABLE: !Ref SourceTable
+        PROJECTION_TABLE: !Ref ProjectionTable
+        QUARANTINE_URL: !Ref QuarantineQueue
+
+Resources:
+  SourceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: record_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: record_id, KeyType: HASH }
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      SSESpecification: { SSEEnabled: true }
+
+  ProjectionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: record_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: record_id, KeyType: HASH }
+      SSESpecification: { SSEEnabled: true }
+
+  QuarantineQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ProjectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fault-tolerance-projection-${RunId}
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.projection_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref ProjectionTable }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt QuarantineQueue.QueueName }
+
+  ReconciliationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fault-tolerance-reconcile-${RunId}
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.reconciliation_handler
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref SourceTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref ProjectionTable }
+
+  PipeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/vendedlogs/pipes/fault-tolerance-projection-${RunId}
+      RetentionInDays: 7
+
+  PipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pipes.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: stream-to-projection
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !GetAtt SourceTable.StreamArn
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ProjectionFunction.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt PipeLogGroup.Arn
+
+  ProjectionPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: !Sub fault-tolerance-projection-${RunId}
+      Description: Version-aware source-to-derived projection.
+      RoleArn: !GetAtt PipeRole.Arn
+      Source: !GetAtt SourceTable.StreamArn
+      Target: !GetAtt ProjectionFunction.Arn
+      DesiredState: RUNNING
+      SourceParameters:
+        DynamoDBStreamParameters:
+          StartingPosition: TRIM_HORIZON
+          BatchSize: 10
+          MaximumRetryAttempts: 2
+          MaximumRecordAgeInSeconds: 300
+          OnPartialBatchItemFailure: AUTOMATIC_BISECT
+      TargetParameters:
+        LambdaFunctionParameters:
+          InvocationType: REQUEST_RESPONSE
+      LogConfiguration:
+        Level: TRACE
+        IncludeExecutionData: [ALL]
+        CloudwatchLogsLogDestination:
+          LogGroupArn: !GetAtt PipeLogGroup.Arn
+
+Outputs:
+  SourceTableName: { Value: !Ref SourceTable }
+  ProjectionTableName: { Value: !Ref ProjectionTable }
+  ProjectionFunctionName: { Value: !Ref ProjectionFunction }
+  ReconciliationFunctionName: { Value: !Ref ReconciliationFunction }
+  QuarantineQueueUrl: { Value: !Ref QuarantineQueue }
+  PipeName: { Value: !Ref ProjectionPipe }

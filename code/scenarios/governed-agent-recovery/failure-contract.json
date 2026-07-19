@@ -1,0 +1,16 @@
+{
+  "capability": "governed agent business action",
+  "failure_contract": {
+    "unauthorized_action": "deny before tool execution",
+    "ambiguous_tool_completion": "replay the canonical result without repeating the effect",
+    "later_step_failure": "compensate the committed effect once and record a terminal state",
+    "high_impact_action": "pause through a durable approval callback rather than agent memory"
+  },
+  "pass_conditions": [
+    "denied tool call produces zero business effects",
+    "replayed tool call produces one business effect and one canonical result",
+    "compensation produces one reversal and an auditable COMPENSATED state",
+    "duplicate compensation is suppressed"
+  ]
+}
+

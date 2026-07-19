@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Distinguish Bedrock capacity routing from evaluated semantic fallback.
+
+Parameters:
+  RunId: { Type: String }
+  PrimaryProfile:
+    Type: String
+    Default: global.amazon.nova-2-lite-v1:0
+  FallbackModel:
+    Type: String
+    Default: amazon.nova-micro-v1:0
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 60
+    MemorySize: 256
+    Environment:
+      Variables:
+        EVALUATION_TABLE: !Ref EvaluationTable
+        PRIMARY_PROFILE: !Ref PrimaryProfile
+        FALLBACK_MODEL: !Ref FallbackModel
+        SUITE_VERSION: fallback-contract-v1
+        MINIMUM_SCORE: '0.66'
+
+Resources:
+  EvaluationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: model_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: model_id, KeyType: HASH }
+      SSESpecification: { SSEEnabled: true }
+
+  BedrockRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: '*'
+
+  EvaluationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fault-tolerance-fallback-evaluation-${RunId}
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.evaluation_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref EvaluationTable }
+        - !Ref BedrockRolePolicy
+
+  GatewayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fault-tolerance-model-gateway-${RunId}
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.gateway_handler
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref EvaluationTable }
+        - !Ref BedrockRolePolicy
+
+Outputs:
+  EvaluationFunctionName: { Value: !Ref EvaluationFunction }
+  GatewayFunctionName: { Value: !Ref GatewayFunction }
+  EvaluationTableName: { Value: !Ref EvaluationTable }
+  PrimaryProfile: { Value: !Ref PrimaryProfile }
+  FallbackModel: { Value: !Ref FallbackModel }
+

@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Recovery-storm containment and tenant-cell isolation evidence stack
+
+Parameters:
+  RunId:
+    Type: String
+    Description: Immutable identifier attached to evidence metrics
+  PolicyMode:
+    Type: String
+    Default: protected
+    AllowedValues: [naive, protected]
+  DownstreamCapacityPerSecond:
+    Type: Number
+    Default: 20
+  ProtectedRatePerSecond:
+    Type: Number
+    Default: 12
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        RUN_ID: !Ref RunId
+        POLICY_MODE: !Ref PolicyMode
+        CONTROL_TABLE: !Ref ControlTable
+        COUNTER_TABLE: !Ref CounterTable
+        OUTCOME_TABLE: !Ref OutcomeTable
+        DOWNSTREAM_CAPACITY_PER_SECOND: !Ref DownstreamCapacityPerSecond
+        PROTECTED_RATE_PER_SECOND: !Ref ProtectedRatePerSecond
+
+Resources:
+  CellADeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  CellBDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  CellAQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CellADeadLetterQueue.Arn
+        maxReceiveCount: 20
+
+  CellBQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CellBDeadLetterQueue.Arn
+        maxReceiveCount: 20
+
+  ControlTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cell_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cell_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  CounterTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: counter_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: counter_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  OutcomeTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: message_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: message_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: ScenarioDataPlane
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !GetAtt ControlTable.Arn
+                  - !GetAtt CounterTable.Arn
+                  - !GetAtt OutcomeTable.Arn
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt CellAQueue.Arn
+                  - !GetAtt CellBQueue.Arn
+
+  CellAWorker:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_worker/
+      Handler: handler.lambda_handler
+      Role: !GetAtt WorkerRole.Arn
+      Environment:
+        Variables:
+          CELL_ID: cell-a
+      Events:
+        Queue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CellAQueue.Arn
+            BatchSize: 10
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  CellBWorker:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_worker/
+      Handler: handler.lambda_handler
+      Role: !GetAtt WorkerRole.Arn
+      Environment:
+        Variables:
+          CELL_ID: cell-b
+      Events:
+        Queue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CellBQueue.Arn
+            BatchSize: 10
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  CellAQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Cell A backlog age exceeded the scenario threshold
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt CellAQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 180
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  ScenarioDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub fault-tolerance-${RunId}-${PolicyMode}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Cell queue depth and age",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CellAQueue.QueueName}", {"label": "cell-a depth"}],
+                  [".", "ApproximateAgeOfOldestMessage", ".", ".", {"label": "cell-a age"}],
+                  ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CellBQueue.QueueName}", {"label": "cell-b depth"}],
+                  [".", "ApproximateAgeOfOldestMessage", ".", ".", {"label": "cell-b age"}]
+                ],
+                "period": 60,
+                "stat": "Maximum"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Scenario outcomes",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  ["FaultToleranceEvidence", "DownstreamAttempt", "RunId", "${RunId}", "Mode", "${PolicyMode}"],
+                  [".", "DownstreamRejected", ".", ".", ".", "."],
+                  [".", "CircuitOpenRejected", ".", ".", ".", "."],
+                  [".", "Completed", ".", ".", ".", "."],
+                  [".", "DuplicateSuppressed", ".", ".", ".", "."]
+                ],
+                "period": 60,
+                "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  CellAQueueUrl:
+    Value: !Ref CellAQueue
+  CellBQueueUrl:
+    Value: !Ref CellBQueue
+  CellADeadLetterQueueUrl:
+    Value: !Ref CellADeadLetterQueue
+  CellBDeadLetterQueueUrl:
+    Value: !Ref CellBDeadLetterQueue
+  ControlTableName:
+    Value: !Ref ControlTable
+  OutcomeTableName:
+    Value: !Ref OutcomeTable
+  DashboardName:
+    Value: !Ref ScenarioDashboard

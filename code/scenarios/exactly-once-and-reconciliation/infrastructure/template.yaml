@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Exactly-once business outcome and derived-state reconciliation evidence stack
+
+Parameters:
+  RunId:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        RUN_ID: !Ref RunId
+        OPERATIONS_TABLE: !Ref OperationsTable
+        PROVIDER_TABLE: !Ref ProviderEffectsTable
+        OUTBOX_TABLE: !Ref OutboxTable
+        PROJECTION_TABLE: !Ref ProjectionTable
+
+Resources:
+  OperationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: operation_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: operation_key
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  ProviderEffectsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: operation_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: operation_key
+          KeyType: HASH
+
+  OutboxTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: operation_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: operation_key
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  ProjectionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: operation_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: operation_key
+          KeyType: HASH
+
+  ScenarioRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: ScenarioTables
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Scan
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !GetAtt OperationsTable.Arn
+                  - !GetAtt ProviderEffectsTable.Arn
+                  - !GetAtt OutboxTable.Arn
+                  - !GetAtt ProjectionTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !GetAtt OutboxTable.StreamArn
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.worker_handler
+      Role: !GetAtt ScenarioRole.Arn
+
+  ProjectorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.projector_handler
+      Role: !GetAtt ScenarioRole.Arn
+      Events:
+        OutboxStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt OutboxTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 1
+            BisectBatchOnFunctionError: true
+            MaximumRetryAttempts: 3
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"]}'
+
+  ReconcilerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.reconcile_handler
+      Role: !GetAtt ScenarioRole.Arn
+
+  EvidenceDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub exactly-once-${RunId}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 7,
+              "properties": {
+                "title": "Exactly-once outcome and projection recovery",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  ["FaultToleranceExactlyOnce", "ProviderEffectCommitted", "RunId", "${RunId}"],
+                  [".", "ProviderResultReplayed", ".", "."],
+                  [".", "CanonicalResultReplayed", ".", "."],
+                  [".", "OutboxCommitted", ".", "."],
+                  [".", "ProjectionCommitted", ".", "."],
+                  [".", "ProjectionReplaySuppressed", ".", "."],
+                  [".", "ProjectionRepaired", ".", "."]
+                ],
+                "period": 60,
+                "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  WorkerFunctionName:
+    Value: !Ref WorkerFunction
+  ProjectorFunctionName:
+    Value: !Ref ProjectorFunction
+  ReconcilerFunctionName:
+    Value: !Ref ReconcilerFunction
+  OperationsTableName:
+    Value: !Ref OperationsTable
+  ProviderEffectsTableName:
+    Value: !Ref ProviderEffectsTable
+  OutboxTableName:
+    Value: !Ref OutboxTable
+  ProjectionTableName:
+    Value: !Ref ProjectionTable
+

@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: RAG freshness, authorization, provenance, and safe-non-answer evidence stack
+
+Parameters:
+  RunId:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 60
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        RUN_ID: !Ref RunId
+        LEDGER_TABLE: !Ref SourceLedgerTable
+        SOURCE_BUCKET: !Ref SourceBucket
+        VECTOR_BUCKET_NAME: !Sub rag-trust-${AWS::AccountId}-${AWS::Region}-${RunId}
+        VECTOR_INDEX_NAME: trust-index
+        EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+
+Resources:
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  SourceLedgerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: document_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: document_key
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName: !Sub rag-trust-${AWS::AccountId}-${AWS::Region}-${RunId}
+      Tags:
+        - Key: Project
+          Value: ArchitectingFaultTolerant
+        - Key: RunId
+          Value: !Ref RunId
+
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    Properties:
+      VectorBucketArn: !Ref VectorBucket
+      IndexName: trust-index
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - source_text
+          - source_uri
+
+  ScenarioRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: TrustScenarioData
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub ${SourceBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt SourceLedgerTable.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: arn:aws:bedrock:eu-west-1::foundation-model/amazon.titan-embed-text-v2:0
+              - Effect: Allow
+                Action:
+                  - s3vectors:PutVectors
+                  - s3vectors:QueryVectors
+                  - s3vectors:GetVectors
+                Resource: !Ref VectorIndex
+
+  PublishFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.publish_handler
+      Role: !GetAtt ScenarioRole.Arn
+
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.ingest_handler
+      Role: !GetAtt ScenarioRole.Arn
+
+  GatewayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/aws_handlers/
+      Handler: handler.gateway_handler
+      Role: !GetAtt ScenarioRole.Arn
+
+  EvidenceDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub rag-trust-${RunId}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 7,
+              "properties": {
+                "title": "RAG trust recovery",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  ["FaultToleranceRagTrust", "SourcePublished", "RunId", "${RunId}"],
+                  [".", "IngestionCompleted", ".", "."],
+                  [".", "SafeNonAnswer", ".", "."],
+                  [".", "AuthorizationRejected", ".", "."],
+                  [".", "VectorQueryAttempt", ".", "."],
+                  [".", "TrustedResponse", ".", "."]
+                ],
+                "period": 60,
+                "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  PublishFunctionName:
+    Value: !Ref PublishFunction
+  IngestFunctionName:
+    Value: !Ref IngestFunction
+  GatewayFunctionName:
+    Value: !Ref GatewayFunction
+  SourceBucketName:
+    Value: !Ref SourceBucket
+  SourceLedgerTableName:
+    Value: !Ref SourceLedgerTable
+  VectorBucketName:
+    Value: !Sub rag-trust-${AWS::AccountId}-${AWS::Region}-${RunId}
+  VectorIndexName:
+    Value: trust-index
+

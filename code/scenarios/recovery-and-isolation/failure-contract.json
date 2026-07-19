@@ -1,0 +1,17 @@
+{
+  "contract_version": "1.0",
+  "business_capability": "Process accepted tenant work without loss or cross-cell collapse during dependency impairment and recovery.",
+  "failure_semantics": {
+    "during_impairment": "Accepted work may queue; it must not be discarded as routine overflow.",
+    "during_recovery": "Recovery traffic must remain within the protected dependency capacity.",
+    "tenant_isolation": "A fault in one cell must not cause the healthy cell to breach its processing SLO."
+  },
+  "thresholds": {
+    "protected_peak_attempts_per_tick": 12,
+    "protected_retry_amplification_max": 1.5,
+    "protected_unprocessed_messages": 0,
+    "healthy_cell_oldest_message_age_max_ticks": 3,
+    "duplicate_business_outcomes": 0
+  }
+}
+
