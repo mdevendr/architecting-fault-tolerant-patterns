@@ -1,97 +1,90 @@
 # Architecting Fault-Tolerant Patterns on AWS
 
-This repository is the architecture and implementation-evidence companion to the article **Architecting AWS Fault-Tolerant Architecture - From Multi-AZ Resilience to AI/ML and GenAI Workloads**.
+This repository is the architecture companion to the article **Architecting AWS Fault-Tolerant Architecture - From Multi-AZ Resilience to AI/ML and GenAI Workloads**.
 
-It is intended for enterprise architects, solution architects, platform architects, technical leaders, and architecture review boards. The repository combines architecture diagrams with bounded AWS experiments that test specific failure contracts.
+It is intended for enterprise architects, solution architects, platform architects, technical leaders and architecture review boards. It provides architecture views and validated evidence for reasoning about how AWS workloads behave when dependencies, data flows, models or automated workflows are impaired.
 
-## Purpose
+## Architectural Scope
 
-Fault tolerance is broader than infrastructure availability. A system can remain online while producing stale data, losing workflow state, exhausting shared capacity, returning degraded model output, or making unsafe automated decisions.
+Fault tolerance is broader than infrastructure availability. A capability may remain online while producing stale data, losing workflow state, exhausting shared capacity, returning degraded model output or making unsafe automated decisions.
 
-The material examines:
+The architectural scope includes:
 
+- Availability Zone and Region failure tolerance;
 - failure containment and blast-radius reduction;
-- Multi-AZ and multi-Region recovery;
-- state protection, replay, and reconciliation;
-- asynchronous shock absorption;
+- shock absorption, backpressure and recovery-storm control;
+- authoritative-state protection, replay and reconciliation;
 - dependency isolation and graceful degradation;
-- controlled deployment and rollback;
+- deployment safety and rollback;
 - AI/ML data and inference resilience;
-- GenAI retrieval, agentic workflows and trust recovery; and
-- observable proof that recovery controls work as intended.
+- RAG freshness, authorization and provenance;
+- governed agent actions and compensating recovery; and
+- operational evidence that recovery controls satisfy the failure contract.
 
 ## Architecture Principles
 
-1. Define the business failure contract before selecting AWS services.
-2. Separate authoritative state from derived and rebuildable state.
-3. Contain failures through cells, bulkheads, queues, quotas and bounded concurrency.
-4. Design recovery paths as production paths with explicit capacity and ownership.
-5. Treat retry, replay, rollback, failover and reconciliation as controlled operations.
-6. Distinguish service recovery from data, model and business-trust recovery.
-7. Require measurable evidence that a recovery mechanism works as intended.
+1. Define the business failure contract before selecting an AWS pattern.
+2. Treat availability, resilience and fault tolerance as related but distinct properties.
+3. Separate authoritative state from derived and rebuildable state.
+4. Contain failures through cells, bulkheads, queues, quotas and bounded concurrency.
+5. Design recovery paths with explicit capacity, ownership and safe replay.
+6. Treat retry, rollback, failover and reconciliation as controlled operations.
+7. Separate service recovery from data, model and business-trust recovery.
+8. Require measurable proof that the capability recovered safely.
+
+## Architecture Catalogue
+
+The [`architecture`](architecture/) directory is the canonical diagram catalogue. Each diagram is a design view rather than a prescriptive deployment template. It should identify:
+
+- the business capability and failure boundary;
+- the authoritative state that must be protected;
+- the containment, degradation or recovery mechanism;
+- dependencies across data and control planes;
+- the expected behaviour while impaired; and
+- the telemetry needed to prove recovery.
+
+AWS service choices must be evaluated against workload availability targets, consistency requirements, RTO and RPO, data-loss tolerance, regulatory constraints, traffic profile and operational maturity.
+
+## Architectural Validation Evidence
+
+The repository includes six bounded AWS experiments. Their purpose is to validate architectural claims, not to present general application examples or production capacity recommendations.
+
+| Architectural question | Validated evidence |
+|---|---|
+| Can queued work recover without overwhelming a returning dependency or affecting a healthy cell? | [Recovery-storm containment and cell isolation](code/scenarios/recovery-and-isolation/evidence/validated/20260719-g01/README.md) |
+| Can at-least-once execution still produce one business outcome and convergent derived state? | [Exactly-once business outcome](code/scenarios/exactly-once-and-reconciliation/evidence/validated/20260719-g02/README.md) |
+| Can an available RAG service refuse stale or cross-tenant context until trust recovers? | [RAG trust recovery](code/scenarios/rag-and-agent-trust/evidence/validated/20260719-g03/README.md) |
+| Can policy prevent an unauthorized agent action while replay and compensation remain safe? | [Governed agent recovery](code/scenarios/governed-agent-recovery/evidence/validated/20260719-g04/README.md) |
+| Can an asynchronous projection detect and repair missing, extra and mismatched state? | [Source-to-derived-state reconciliation](code/scenarios/derived-state-reconciliation/evidence/validated/20260719-g05/README.md) |
+| Can capacity routing be separated from a semantic model change and its quality contract? | [Capacity routing versus model fallback](code/scenarios/capacity-routing-and-model-fallback/evidence/validated/20260719-g06/README.md) |
+
+Each evidence report states the injected failure, observed recovery behaviour and limitations. Implementation mechanics and reproduction guidance remain under [`code`](code/README.md), keeping this landing page focused on architectural decisions.
 
 ## Repository Structure
 
 ```text
-architecture/               Architecture diagrams and retained diagram sources
-code/
-  scenarios/                Independently executable failure experiments
-  shared/                   Shared evidence utilities
-docs/
-  article/                  Article-supporting architectural material
-  article-changes/          Exact article removal and insertion sheets
-  article-integration/      Detailed implementation-to-article guidance
-evidence/                   Architecture-assurance placeholders and reviewed evidence
+architecture/               Canonical architecture diagrams
+code/                       Bounded validation implementations and evidence
+evidence/                   Reviewed architecture-assurance material
 ```
 
-The `architecture` directory remains the canonical diagram catalogue. The `code/scenarios` directory contains bounded evidence implementations, not general application samples.
+## Using This Repository
 
-## Validated Implementation Evidence
+Use the repository to support architecture reviews and article claims:
 
-| Failure contract | Validated run | Evidence |
-|---|---|---|
-| Recovery-storm containment and cell isolation | `20260719-g01` | [Report](code/scenarios/recovery-and-isolation/evidence/validated/20260719-g01/README.md) |
-| Exactly-once business outcome under at-least-once execution | `20260719-g02` | [Report](code/scenarios/exactly-once-and-reconciliation/evidence/validated/20260719-g02/README.md) |
-| RAG freshness, tenant authorization and provenance recovery | `20260719-g03` | [Report](code/scenarios/rag-and-agent-trust/evidence/validated/20260719-g03/README.md) |
-| Governed agent tool execution and compensation | `20260719-g04` | [Report](code/scenarios/governed-agent-recovery/evidence/validated/20260719-g04/README.md) |
-| Source-to-derived-state reconciliation | `20260719-g05` | [Report](code/scenarios/derived-state-reconciliation/evidence/validated/20260719-g05/README.md) |
-| Capacity routing versus evaluated semantic model fallback | `20260719-g06` | [Report](code/scenarios/capacity-routing-and-model-fallback/evidence/validated/20260719-g06/README.md) |
+1. begin with the relevant failure contract;
+2. use the diagram to understand boundaries and recovery paths;
+3. inspect the validated evidence before accepting the architectural claim;
+4. retain the stated limitations and service-selection trade-offs; and
+5. cite an immutable commit or evidence tag rather than a moving branch.
 
-Each scenario includes:
+## Boundaries
 
-- a machine-readable failure contract;
-- deterministic local tests;
-- AWS infrastructure definitions;
-- a repeatable fault-injection and evidence runner;
-- a sanitized validated result; and
-- explicit limitations and article-placement guidance.
-
-## Using the Evidence
-
-The implementations support architectural claims; they are not production capacity recommendations or turnkey production systems. Each result is bounded by its workload, Region, quotas, fault seam and evaluation contract.
-
-When referencing evidence from the article:
-
-1. link to the relevant validated report;
-2. link short code excerpts to the exact implementation file;
-3. use an immutable commit or evidence tag rather than a moving branch; and
-4. retain the documented limitations.
-
-The numbered change sheets in [`docs/article-changes`](docs/article-changes/) specify what to remove, what to add and where each evidence package belongs in the article.
-
-## Architecture Catalogue
-
-Each diagram is a design view rather than a prescriptive deployment template. It communicates the failure boundary, protected capability, containment mechanism, degraded path and operational proof required.
-
-AWS service choices must still be evaluated against workload availability targets, consistency requirements, recovery objectives, regulatory constraints, traffic profile and operational maturity.
-
-## Scope and Safety
-
-- Infrastructure templates deploy bounded evidence stacks and require review before use.
-- Raw generated run payloads, credentials, customer data and unreviewed operational logs are excluded from Git.
-- Validated evidence reports are sanitized summaries.
-- Managed-service outages are not induced; experiments use explicit application fault seams.
-- Cost, quotas, Region availability and teardown behaviour must be reviewed before reproduction.
+- The diagrams are not universal reference architectures.
+- The evidence workloads are bounded experiments, not production benchmarks.
+- Managed-service outages are not induced; controlled application fault seams are used.
+- A successful experiment validates only its declared failure contract and configuration.
+- Production adoption requires independent security, cost, quota, performance and regulatory review.
 
 ## Author
 
@@ -104,4 +97,4 @@ My work focuses on zero-trust data access patterns, serverless architecture, AI-
 
 ## Status
 
-Six evidence packages have completed bounded AWS validation. Article integration, diagram refinement and final publication review remain in progress.
+Six architectural evidence packages have completed bounded AWS validation. Article integration, diagram refinement and final publication review remain in progress.
